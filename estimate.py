@@ -31,14 +31,14 @@ def fixed_result_analysis(task_names, df, my_rating=None):
     df = df[df["rating"] > 0]
     for task_screen_name, task_name in task_names.items():
         model = LogisticRegression(solver="lbfgs")
-        input = df[["is_rated", "raw_rating"]]
+        input = df[["one", "raw_rating"]]
         output = df[task_screen_name + ".ac"]
         model.fit(input, output)
         is_rated_coef = model.coef_[0][0]
         rating_coef = model.coef_[0][1]
         intercept = model.intercept_[0]
         raw_difficulty = -(intercept + is_rated_coef) / rating_coef
-        print("{}: {:.2f} ({:.2f})".format(task_name, adjust_difficulty(raw_difficulty), raw_difficulty))
+        print("{}: {:.2f} ({:.2f}) ({:.6f})".format(task_name, adjust_difficulty(raw_difficulty), raw_difficulty, -rating_coef))
 
         first_ac = df[task_screen_name + ".elapsed"].min()
         time_model = LinearRegression()
@@ -50,6 +50,10 @@ def fixed_result_analysis(task_names, df, my_rating=None):
         time_model.fit(time_input, time_output)
         time_coef = time_model.coef_[0]
         time_intercept = time_model.intercept_ if isinstance(time_model.intercept_, float) else time_model.intercept_[0]
+        for _t in [25, 50, 100, 200]:
+            t = _t * 60 * 10 ** 9
+            r = (math.log(t) - time_intercept) / time_coef
+            print(f"difficulty {r} (truncate time: {_t} mins)")
         print(f"{time_coef} * rating + {time_intercept}")
         if time_coef > 0:
             print("[warning] slope is positive. ")
@@ -82,8 +86,8 @@ def fixed_result_analysis(task_names, df, my_rating=None):
         stddev = math.sqrt(variance)
         lowers = [exact_time(predict(r) - stddev) for r in xs]
         uppers = [exact_time(predict(r) + stddev) for r in xs]
-        # plt.plot(xs, lowers, color='pink')
-        # plt.plot(xs, uppers, color='pink')
+        plt.plot(xs, lowers, color='pink')
+        plt.plot(xs, uppers, color='pink')
         # actual smoothed
         cuts = pd.cut(raw_rating, xs)
         sm_xs = raw_rating.groupby(cuts).mean()
@@ -172,6 +176,7 @@ def estimate_contest_difficulty(contest_name: str):
             continue
 
         user_row = {
+            "one": 1.,
             "is_rated": is_rated,
             "rating": rating,
             "new_rating": new_rating,
